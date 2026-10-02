@@ -1,0 +1,19 @@
+{
+  "name": "cwr-intelligent-irrigation-scheduler",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CWR & Intelligent Irrigation Scheduler — FAO Irrigation Manual Module 4 methodology",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/fao-engine && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
+    "test": "npm run test --workspace=packages/fao-engine",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web"
+  },
+  "engines": {
+    "node": ">=18.18"
+  }
+}
