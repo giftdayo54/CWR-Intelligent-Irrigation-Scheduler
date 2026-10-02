@@ -1,0 +1,22 @@
+{
+  "name": "@cwr/fao-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FAO Irrigation Manual Module 4 calculation engine: ET0, Kc, ETc, effective rainfall, IRn/IRg, soil water balance, irrigation scheduling, Ky yield response.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.14.10"
+  }
+}
