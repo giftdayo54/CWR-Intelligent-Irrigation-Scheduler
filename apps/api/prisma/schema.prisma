@@ -1,0 +1,241 @@
+// CWR & Intelligent Irrigation Scheduler — database schema
+// Mirrors FAO Irrigation Manual Module 4 terminology throughout.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  FARMER
+  IRRIGATION_ENGINEER
+  RESEARCHER
+  STUDENT
+  EXTENSION_OFFICER
+  ADMIN
+}
+
+enum SoilTexture {
+  SAND
+  LOAMY_SAND
+  SANDY_LOAM
+  LOAM
+  CLAY_LOAM
+  CLAY
+}
+
+enum IrrigationSystem {
+  SURFACE
+  SPRINKLER
+  DRIP
+}
+
+enum PlantingStatus {
+  ACTIVE
+  HARVESTED
+  ABANDONED
+}
+
+enum ET0Method {
+  PENMAN_MONTEITH
+  CLASS_A_PAN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(FARMER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  farms      Farm[]
+  customCrops Crop[]   @relation("CropCreatedBy")
+
+  @@map("users")
+}
+
+model Farm {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  location  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fields   Field[]
+  stations WeatherStation[]
+
+  @@index([userId])
+  @@map("farms")
+}
+
+/// Module 2: Weather Module — one row per met station.
+model WeatherStation {
+  id                String   @id @default(cuid())
+  farmId            String?
+  name              String
+  latitudeDeg       Float
+  longitudeDeg      Float
+  elevationM        Float
+  anemometerHeightM Float    @default(2)
+  createdAt         DateTime @default(now())
+
+  farm         Farm?          @relation(fields: [farmId], references: [id], onDelete: SetNull)
+  dailyWeather DailyWeather[]
+  fields       Field[]
+
+  @@map("weather_stations")
+}
+
+/// One row per day, in the exact structure of MET_DATA.xlsx.
+model DailyWeather {
+  id        String   @id @default(cuid())
+  stationId String
+  date      DateTime @db.Date
+
+  maxTemperatureC Float
+  minTemperatureC Float
+  rhMaxPct        Float?
+  rhMinPct        Float?
+  dryBulb08C      Float?
+  dryBulb14C      Float?
+  wetBulb08C      Float?
+  wetBulb14C      Float?
+  maxResetC       Float?
+  minResetC       Float?
+  grassMinC       Float?
+  temp08C         Float?
+  rh08Pct         Float?
+  temp14C         Float?
+  rh14Pct         Float?
+  etStationMm     Float?
+  rainMm          Float   @default(0)
+  radiationMJm2   Float?
+  sunHours        Float?
+  noDips          Float?
+  classAPanMm     Float?
+  windRunKmDay    Float?
+  anemometerReading Float?
+  soilTemp5cm08C    Float?
+  soilTemp10cm08C   Float?
+  soilTemp20cm08C   Float?
+  soilTemp100cm08C  Float?
+  soilTemp5cm14C    Float?
+  soilTemp10cm14C   Float?
+  soilTemp20cm14C   Float?
+  soilTemp100cm14C  Float?
+  flags             String[] @default([])
+
+  station WeatherStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@unique([stationId, date])
+  @@index([stationId, date])
+  @@map("daily_weather")
+}
+
+/// Module 2: Smart Crop Database — seeded from Tables 20/21/54/57, plus
+/// user-created custom crops.
+model Crop {
+  id              String  @id @default(cuid())
+  name            String
+  scientificName  String?
+  category        String
+  kcIni           Float
+  kcMid           Float
+  kcEnd           Float
+  stageInitialDays     Int
+  stageDevelopmentDays Int
+  stageMidDays         Int
+  stageLateDays        Int
+  rootDepthMinM        Float
+  rootDepthMaxM        Float
+  allowableDepletionP  Float
+  maxCropHeightM       Float?
+  kyVegetative     Float?
+  kyFlowering      Float?
+  kyYieldFormation Float?
+  kyRipening       Float?
+  kyTotal          Float?
+  isCustom         Boolean  @default(false)
+  createdById      String?
+  createdAt        DateTime @default(now())
+
+  createdBy User?      @relation("CropCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  plantings Planting[]
+
+  @@map("crops")
+}
+
+model Field {
+  id        String      @id @default(cuid())
+  farmId    String
+  stationId String?
+  name      String
+  areaHa    Float
+  soilTexture SoilTexture
+  totalAvailableMoistureMmPerM Float? // lab-measured override (mm/m); falls back to texture default
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  farm      Farm             @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  station   WeatherStation?  @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  plantings Planting[]
+
+  @@index([farmId])
+  @@map("fields")
+}
+
+/// One crop cycle in one field — the unit the Dashboard/Growth Stage
+/// Engine/Scheduler all operate on.
+model Planting {
+  id                        String           @id @default(cuid())
+  fieldId                   String
+  cropId                    String
+  plantingDate              DateTime         @db.Date
+  expectedHarvestDate       DateTime?        @db.Date
+  variety                   String?
+  climateZone               String?
+  irrigationSystem          IrrigationSystem @default(SPRINKLER)
+  systemEfficiencyOverride  Float?
+  applicationRateMmPerHour  Float?
+  et0Method                 ET0Method        @default(PENMAN_MONTEITH)
+  status                    PlantingStatus   @default(ACTIVE)
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+
+  field             Field              @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  crop              Crop               @relation(fields: [cropId], references: [id], onDelete: Restrict)
+  irrigationEvents  IrrigationEvent[]
+
+  @@index([fieldId])
+  @@map("plantings")
+}
+
+enum IrrigationEventSource {
+  SCHEDULED
+  MANUAL_LOG
+}
+
+model IrrigationEvent {
+  id            String                @id @default(cuid())
+  plantingId    String
+  date          DateTime              @db.Date
+  netDepthMm    Float
+  grossDepthMm  Float
+  durationHours Float?
+  volumeM3      Float?
+  source        IrrigationEventSource @default(SCHEDULED)
+  createdAt     DateTime              @default(now())
+
+  planting Planting @relation(fields: [plantingId], references: [id], onDelete: Cascade)
+
+  @@index([plantingId, date])
+  @@map("irrigation_events")
+}
